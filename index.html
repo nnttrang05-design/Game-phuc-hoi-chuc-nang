@@ -91,7 +91,7 @@
 
         /* ================= 2. GIAO DIỆN CHỌN KHỚP ================= */
         #selection-screen {
-            display: none; /* Ẩn mặc định */
+            display: none;
             height: 100vh;
             text-align: center;
             background: #000000;
@@ -153,9 +153,22 @@
         }
 
 
-        /* ================= 3. GIAO DIỆN GAME (MEDIA PIPE) ================= */
+        /* ================= 3. GIAO DIỆN HIỆU CHUẨN KHOẢNG CÁCH ================= */
+        #calibration-screen {
+            display: none;
+            height: 100vh;
+            flex-direction: column;
+            background: #000000;
+            color: #ffffff;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+
+        /* ================= 4. GIAO DIỆN GAME (MEDIA PIPE) ================= */
         #game-screen {
-            display: none; /* Ẩn mặc định */
+            display: none;
             height: 100vh;
             flex-direction: column;
             background: #000000;
@@ -200,7 +213,7 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            transform: scaleX(-1); /* Lật ngang để giống gương */
+            transform: scaleX(-1);
         }
 
 
@@ -248,22 +261,32 @@
         <h2>CHỌN KHỚP CẦN LUYỆN TẬP</h2>
         <div class="body-wrapper">
             <img src="skeleton.png" class="body-img" alt="Mô hình giải phẫu">
-           
             <div class="joint-dot" style="top: 23%; left: 39%;" onclick="alert('Khớp Vai - Chức năng đang cập nhật')"></div>
             <div class="joint-dot" style="top: 23%; left: 61%;" onclick="alert('Khớp Vai - Chức năng đang cập nhật')"></div>
-           
             <div class="joint-dot" style="top: 39%; left: 32%;" onclick="alert('Khuỷu Tay - Chức năng đang cập nhật')"></div>
             <div class="joint-dot" style="top: 39%; left: 66.5%;" onclick="alert('Khuỷu Tay - Chức năng đang cập nhật')"></div>
-           
             <div class="joint-dot" style="top: 53%; left: 26%;" onclick="startHandGame()" title="Bắt đầu bài tập Bàn tay"></div>
             <div class="joint-dot" style="top: 53%; left: 72%;" onclick="startHandGame()" title="Bắt đầu bài tập Bàn tay"></div>
-           
             <div class="joint-dot" style="top: 69%; left: 41.5%;" onclick="alert('Khớp Gối - Chức năng đang cập nhật')"></div>
             <div class="joint-dot" style="top: 69%; left: 58.5%;" onclick="alert('Khớp Gối - Chức năng đang cập nhật')"></div>
-           
             <div class="joint-dot" style="top: 89%; left: 42.5%;" onclick="alert('Bàn Chân - Chức năng đang cập nhật')"></div>
             <div class="joint-dot" style="top: 89%; left: 57.5%;" onclick="alert('Bàn Chân - Chức năng đang cập nhật')"></div>
         </div>
+    </div>
+
+
+    <div id="calibration-screen">
+        <h2 style="color: var(--med-blue); letter-spacing: 2px;">HIỆU CHUẨN KHOẢNG CÁCH (CALIBRATION)</h2>
+        <p style="font-size: 18px; text-align: center; max-width: 600px;">
+            Hệ thống cần xác định vị trí không gian để đánh giá vận động.<br>
+            <strong style="color: var(--alert-red); font-size: 22px; display: block; margin-top: 10px;" id="calibration-instruction">
+                Hãy đưa tay vào khung hình.
+            </strong>
+        </p>
+        <div style="position: relative; width: 640px; height: 480px; border: 2px dashed var(--med-blue); border-radius: 8px; overflow: hidden; margin-top: 20px; background: #111;">
+            <canvas id="calibration-canvas" style="width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1);"></canvas>
+        </div>
+        <button class="back-btn" style="margin-top: 30px;" onclick="stopGame(false)">HỦY BÀI TẬP</button>
     </div>
 
 
@@ -299,7 +322,18 @@
         let spawnIntervalId = null;
         let timeLeft = 60;
         let isGameRunning = false;
+        let isCalibrating = false;
         let audioCtx;
+       
+        // Cấu hình DOM cho giao diện hiệu chuẩn
+        let calibrationCanvas;
+        let calibCtx;
+       
+        // Khởi tạo Canvas hiệu chuẩn sau khi DOM load
+        document.addEventListener("DOMContentLoaded", () => {
+            calibrationCanvas = document.getElementById('calibration-canvas');
+            if (calibrationCanvas) calibCtx = calibrationCanvas.getContext('2d');
+        });
 
 
         // Hàm phát âm thanh phản hồi
@@ -329,10 +363,11 @@
         function showScreen(id) {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('selection-screen').style.display = 'none';
+            document.getElementById('calibration-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'none';
            
             const targetScreen = document.getElementById(id);
-            if (id === 'game-screen' || id === 'selection-screen') {
+            if (id === 'game-screen' || id === 'selection-screen' || id === 'calibration-screen') {
                 targetScreen.style.display = 'flex';
             } else {
                 targetScreen.style.display = 'block';
@@ -352,32 +387,49 @@
         }
 
 
-        // Khởi động module Game
+        // Khởi động module Nhận diện và Mở màn hình Hiệu chuẩn
         function startHandGame() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
            
-            showScreen('game-screen');
-            score = 0;
-            timeLeft = 60;
-            fallingBags = [];
-            isGameRunning = true;
-            wasClosedInPreviousFrame = false;
-
-
-            document.getElementById('score').innerText = "Điểm: 0";
-            document.getElementById('timer').innerText = `Thời gian: ${timeLeft}s`;
-            document.getElementById('status').innerText = "Đang kết nối camera...";
+            showScreen('calibration-screen');
+            isCalibrating = true;
+            isGameRunning = false;
+           
+            document.getElementById('calibration-instruction').innerText = "Hãy để tay cách xa màn hình trong khoảng 20 đến 30 cm.";
+            document.getElementById('calibration-instruction').style.color = "var(--alert-red)";
 
 
             if (!camera) {
                 camera = new Camera(videoElement, {
-                    onFrame: async () => { if(isGameRunning) await hands.send({image: videoElement}); },
+                    onFrame: async () => {
+                        if(isGameRunning || isCalibrating) await hands.send({image: videoElement});
+                    },
                     width: 1280,
                     height: 720
                 });
             }
             camera.start();
+        }
+
+
+        // Module bắt đầu thuật toán Game
+        function beginActualGame() {
+            isCalibrating = false;
+            isGameRunning = true;
+            showScreen('game-screen');
            
+            score = 0;
+            timeLeft = 60;
+            fallingBags = [];
+            wasClosedInPreviousFrame = false;
+
+
+            document.getElementById('score').innerText = "Điểm: 0";
+            document.getElementById('timer').innerText = `Thời gian: ${timeLeft}s`;
+            document.getElementById('status').innerText = "Đang phân tích vận động...";
+            document.getElementById('status').style.color = "var(--med-blue)";
+
+
             clearInterval(spawnIntervalId);
             spawnIntervalId = setInterval(spawnMoney, 2000);
 
@@ -386,7 +438,6 @@
             gameTimerInterval = setInterval(() => {
                 timeLeft--;
                 document.getElementById('timer').innerText = `Thời gian: ${timeLeft}s`;
-               
                 if (timeLeft <= 0) {
                     stopGame(true);
                 }
@@ -397,6 +448,7 @@
         // Kết thúc/Tạm dừng Game
         function stopGame(isTimeOut) {
             isGameRunning = false;
+            isCalibrating = false;
             clearInterval(gameTimerInterval);
             clearInterval(spawnIntervalId);
             if (camera) camera.stop();
@@ -412,9 +464,83 @@
 
         // Xử lý dữ liệu khung hình từ MediaPipe
         function onResults(results) {
+            // Logic xử lý tại màn hình hiệu chuẩn
+            if (isCalibrating) {
+                if (!calibrationCanvas) return;
+                calibrationCanvas.width = videoElement.videoWidth;
+                calibrationCanvas.height = videoElement.videoHeight;
+                calibCtx.save();
+                calibCtx.clearRect(0, 0, calibrationCanvas.width, calibrationCanvas.height);
+                calibCtx.drawImage(results.image, 0, 0, calibrationCanvas.width, calibrationCanvas.height);
+
+
+                const instructionEl = document.getElementById('calibration-instruction');
+
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    drawConnectors(calibCtx, landmarks, HAND_CONNECTIONS, {color: '#00e5ff', lineWidth: 4});
+                   
+                    // Phương pháp Heuristic: Tính độ dài từ cổ tay (0) đến đỉnh ngón giữa (12)
+                    const vectorX = landmarks[0].x - landmarks[12].x;
+                    const vectorY = landmarks[0].y - landmarks[12].y;
+                    const handSizeRatio = Math.hypot(vectorX, vectorY);
+
+
+                   
+
+
+                    // THÔNG SỐ ĐÃ ĐƯỢC HIỆU CHUẨN THỰC NGHIỆM
+                    const MIN_RATIO = 0.605; // Ngưỡng xa nhất (tương đương 30 cm)
+                    const MAX_RATIO = 0.750; // Ngưỡng gần nhất (tương đương 20 cm)
+
+
+                    // Phân loại trạng thái không gian và cập nhật UI cho bệnh nhân
+                    if (handSizeRatio < MIN_RATIO) {
+                        instructionEl.innerText = "Tay đang QUÁ XA. Hãy để tay cách màn hình khoảng 20 - 30 cm.";
+                        instructionEl.style.color = "#ff9800"; // Cam cảnh báo
+                       
+                        // Reset timer nếu bệnh nhân di chuyển tay ra khỏi vùng chuẩn
+                        if (window.calibrationTimer) {
+                            clearTimeout(window.calibrationTimer);
+                            window.calibrationTimer = null;
+                        }
+                    } else if (handSizeRatio > MAX_RATIO) {
+                        instructionEl.innerText = "Tay đang QUÁ GẦN. Hãy để tay cách màn hình khoảng 20 - 30 cm.";
+                        instructionEl.style.color = "#ff9800";
+                       
+                        if (window.calibrationTimer) {
+                            clearTimeout(window.calibrationTimer);
+                            window.calibrationTimer = null;
+                        }
+                    } else {
+                        instructionEl.innerText = "Khoảng cách đạt chuẩn. Hãy giữ yên tay, đang nạp bài tập...";
+                        instructionEl.style.color = "#4caf50"; // Xanh lá xác nhận
+                       
+                        // Kích hoạt bài tập sau độ trễ 1.5 giây để đảm bảo tính ổn định của tư thế
+                        if (!window.calibrationTimer) {
+                            window.calibrationTimer = setTimeout(() => {
+                                if (isCalibrating) beginActualGame();
+                                window.calibrationTimer = null;
+                            }, 1500);
+                        }
+                    }
+                } else {
+                    instructionEl.innerText = "Chưa nhận diện được bàn tay. Hãy đưa tay vào khung hình.";
+                    instructionEl.style.color = "var(--alert-red)";
+                    if (window.calibrationTimer) {
+                        clearTimeout(window.calibrationTimer);
+                        window.calibrationTimer = null;
+                    }
+                }
+                calibCtx.restore();
+                return;
+            }
+
+
+            // Logic xử lý màn hình Game chính thức
             if (!isGameRunning) return;
-
-
+           
             canvasElement.width = videoElement.videoWidth;
             canvasElement.height = videoElement.videoHeight;
            
@@ -462,8 +588,6 @@
                                 document.getElementById('status').innerText = "✅ CHÍNH XÁC!";
                                 document.getElementById('status').style.color = "green";
                                 playCoinSound();
-
-
                             } else if (isNowClosed && !justGrabbedAction) {
                                 document.getElementById('status').innerText = "❌ YÊU CẦU MỞ TAY";
                                 document.getElementById('status').style.color = "red";
@@ -473,6 +597,7 @@
                             }
                         }
                     });
+
 
                     // Cập nhật trạng thái hiển thị
                     if (!touchingAnyBag) {
@@ -484,6 +609,8 @@
                             document.getElementById('status').style.color = "var(--med-blue)";
                         }
                     }
+
+
                     wasClosedInPreviousFrame = isNowClosed;
                 }
             } else {
@@ -492,6 +619,8 @@
             }
             canvasCtx.restore();
         }
+
+
         // Khởi tạo thư viện nhận diện
         const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
         hands.setOptions({
